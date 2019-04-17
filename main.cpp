@@ -25,10 +25,10 @@ using namespace aws::lambda_runtime;
 std::string bb_wrapper(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
-    Aws::String const& key,
-    Aws::String& encoded_output);
+    Aws::String const& key);//,
+    //Aws::String& encoded_output);
 
-std::string bb_process(Aws::String const& filename, Aws::String& output);
+std::string bb_process(Aws::String const& filename);  //, Aws::String& output);
 char const TAG[] = "LAMBDA_ALLOC";
 
 static invocation_response my_handler(invocation_request const& req, 
@@ -63,7 +63,7 @@ static invocation_response my_handler(invocation_request const& req,
     AWS_LOGSTREAM_INFO(TAG, "Attempting to download file from s3://" << bucket << "/" << key);
 
     Aws::String base64_encoded_file;
-    auto err = bb_wrapper(client, bucket, key, base64_encoded_file);
+    auto err = bb_wrapper(client, bucket, key);  //, base64_encoded_file);
     if (!err.empty()) 
     {			
         using namespace Aws::DynamoDB::Model;
@@ -76,6 +76,14 @@ static invocation_response my_handler(invocation_request const& req,
         AttributeValue val;
         val.SetS("JumpshotSwish");
         pir.AddItem("RecordName", val);
+        val.SetS("250");
+        pir.AddItem("TotalShots", val);
+        val.SetS("100");
+        pir.AddItem("ShotsMissed", val);
+        val.SetS("150");
+        pir.AddItem("ShotsMade", val);
+
+
         const PutItemOutcome put_result = dynamoClient.PutItem(pir);
 
         if (!put_result.IsSuccess())
@@ -121,7 +129,7 @@ int main()
     return 0;
 }
 
-std::string bb_process(Aws::IOStream& stream, Aws::String& output)
+std::string bb_process(Aws::IOStream& stream)  //, Aws::String& output)
 {
     Aws::Vector<unsigned char> bits;
     bits.reserve(stream.tellp());
@@ -150,8 +158,8 @@ std::string bb_process(Aws::IOStream& stream, Aws::String& output)
 std::string bb_wrapper(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
-    Aws::String const& key,
-    Aws::String& encoded_output)
+    Aws::String const& key)  //,
+    //Aws::String& encoded_output)
 {
     using namespace Aws;
 
@@ -162,7 +170,7 @@ std::string bb_wrapper(
     if (outcome.IsSuccess()) {
         AWS_LOGSTREAM_INFO(TAG, "Download completed!");
         auto& s = outcome.GetResult().GetBody();
-        return bb_process(s, encoded_output);
+        return bb_process(s);  //, encoded_output);
     }
     else {
         AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
