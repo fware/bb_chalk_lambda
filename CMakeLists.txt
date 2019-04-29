@@ -4,11 +4,32 @@ project(bb_chalk LANGUAGES CXX)
 
 find_package(aws-lambda-runtime)
 find_package(AWSSDK COMPONENTS dynamodb s3)
+find_package(OpenCV REQUIRED)
+find_package(FFmpeg REQUIRED)
+
+message(STATUS "OpenCV library status:")
+message(STATUS "    version: ${OpenCV_VERSION}")
+message(STATUS "    libraries: ${OpenCV_LIBS}")
+message(STATUS "    include path: ${OpenCV_INCLUDE_DIRS}")
+message(STATUS "    include path: ${AVCODEC_INCLUDE_DIR}")
+
+message(STATUS "FFMPEG library status:")
+message(STATUS "    libraries: ${FFMPEG_LIST_LIBRARIES}")
+message(STATUS "    include path: ${FFMPEG_INCLUDE_DIR}")
 
 add_executable(${PROJECT_NAME} "main.cpp")
+
+if(CMAKE_VERSION VERSION_LESS "2.8.11")
+  # Add OpenCV headers location to your include paths
+  include_directories(${OpenCV_INCLUDE_DIRS})
+  # Add FFMPEG headers location to your include paths
+  include_directories(${FFMPEG_INCLUDE_DIR})
+endif()
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
                       AWS::aws-lambda-runtime
-                       ${AWSSDK_LINK_LIBRARIES})
+                       ${AWSSDK_LINK_LIBRARIES}
+		       ${OpenCV_LIBS})
 
 	       #target_compile_options(${PROJECT_NAME} PRIVATE
 	       #"-fno-exceptions"

@@ -9,6 +9,7 @@
 #include <aws/core/utils/logging/ConsoleLogSystem.h>
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/json/JsonSerializer.h>
+#include <aws/core/utils/StringUtils.h>
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/core/platform/Environment.h>
 #include <aws/core/client/ClientConfiguration.h>
@@ -16,11 +17,22 @@
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/lambda-runtime/runtime.h>
+#include <libavutil/imgutils.h>
+#include <libavformat/avformat.h>
+#include <libavutil/adler32.h>
+#include <libavcodec/avcodec.h>
+#include <libswscale/swscale.h>
+#include <vector>
+#include <iterator>
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include <string>
 
+
 using namespace aws::lambda_runtime;
+
+static const char* ALLOCATION_TAG = "BBChalk";
 
 std::string bb_wrapper(
     Aws::S3::S3Client const& client,
@@ -28,8 +40,10 @@ std::string bb_wrapper(
     Aws::String const& key);//,
     //Aws::String& encoded_output);
 
-std::string bb_process(Aws::String const& filename);  //, Aws::String& output);
+std::string bb_videoread(Aws::String const& filename);  //, Aws::String& output);
 char const TAG[] = "LAMBDA_ALLOC";
+
+
 
 static invocation_response my_handler(invocation_request const& req, 
 							//Aws::S3::S3Client const& client)
@@ -71,18 +85,17 @@ static invocation_response my_handler(invocation_request const& req,
         PutItemRequest pir;
         pir.SetTableName("truchalkdb-1");
         AttributeValue av;
-        av.SetS("Sax");
+        av.SetS("FrenchHorn");
         pir.AddItem("UserName", av);
         AttributeValue val;
-        val.SetS("JumpshotSwish");
+        val.SetS("StepBack");
         pir.AddItem("RecordName", val);
-        val.SetS("250");
+        val.SetS("800");
         pir.AddItem("TotalShots", val);
-        val.SetS("100");
+        val.SetS("500");
         pir.AddItem("ShotsMissed", val);
-        val.SetS("150");
+        val.SetS("300");
         pir.AddItem("ShotsMade", val);
-
 
         const PutItemOutcome put_result = dynamoClient.PutItem(pir);
 
@@ -104,6 +117,77 @@ std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetCon
         return Aws::MakeShared<Aws::Utils::Logging::ConsoleLogSystem>(
             "console_logger", Aws::Utils::Logging::LogLevel::Trace);
     };
+}
+
+std::string bb_videoread(Aws::IOStream& stream)  //, Aws::String& output)
+{
+    Aws::Vector<unsigned char> videoBits;
+    videoBits.reserve(stream.tellp());
+    stream.seekg(0, stream.beg);
+	
+    char streamBuffer[4096 * 4];  //[1024 * 4];
+    auto loops = 0;
+
+    while (stream.good()) {
+    	loops++;
+
+        stream.read(streamBuffer, sizeof(streamBuffer));
+        auto bytesRead = stream.gcount();
+
+        if (bytesRead > 0) {
+            videoBits.insert(videoBits.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
+        }
+    }
+
+
+
+   auto videoDataStr = std::to_string(videoBits.size());  //"loops=" + std::to_string(loops);
+    //Aws::Utils::ByteBuffer bb(bits.data(), bits.size());
+    //output = bitstr;   //Aws::Utils::HashingUtils::Base64Encode(bb);
+    return {videoDataStr};
+}
+
+std::string bb_wrapper(
+    Aws::S3::S3Client const& client,
+    Aws::String const& bucket,
+    Aws::String const& key)  //,
+    //Aws::String& encoded_output)
+{
+    using namespace Aws;
+
+    Aws::String fileContents;
+    Aws::String tempVideoFile = "videoTempFile.mp4";
+    S3::Model::GetObjectRequest request;
+    request.WithBucket(bucket).WithKey(key);
+
+	//{
+	    auto outcome = client.GetObject(request);
+		
+	    if (outcome.IsSuccess()) 
+	    {
+	    
+		/*
+		Aws::IFStream downloadedFile(tempVideoFile.c_str());
+		if (downloadedFile.good())
+		{
+			downloadedFile.seekg(0, std::ios::end);
+		         fileContents.reserve(static_cast<uint32_t>(downloadedFile.tellg()));
+	            	downloadedFile.seekg(0, std::ios::beg);
+	            	fileContents.assign((std::istreambuf_iterator<char>(downloadedFile)), std::istreambuf_iterator<char>());
+		}*/
+			
+	        AWS_LOGSTREAM_INFO(TAG, "Download completed!");
+		/*std::istreambuf_iterator<char> eos;
+		std::istreambuf_iterator<char> bos (outcome.GetResult().GetBody().rdbuf());
+		videoVec = std::vector<char> (bos, eos);*/
+	        auto& s = outcome.GetResult().GetBody();
+	        return bb_videoread(s);  //, encoded_output);
+	    }
+	    else {
+	        AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
+	        return "Will Have An Error";  //outcome.GetError().GetMessage();
+	    }
+	//}
 }
 
 int main()
@@ -129,51 +213,4 @@ int main()
     return 0;
 }
 
-std::string bb_process(Aws::IOStream& stream)  //, Aws::String& output)
-{
-    Aws::Vector<unsigned char> bits;
-    bits.reserve(stream.tellp());
-    stream.seekg(0, stream.beg);
 
-    char streamBuffer[4096 * 4];  //[1024 * 4];
-    auto loops = 0;
-
-    while (stream.good()) {
-    	loops++;
-
-        stream.read(streamBuffer, sizeof(streamBuffer));
-        auto bytesRead = stream.gcount();
-
-        if (bytesRead > 0) {
-            bits.insert(bits.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
-        }
-    }
-
-    auto bitstr = std::to_string(bits.size());  //"loops=" + std::to_string(loops);
-    //Aws::Utils::ByteBuffer bb(bits.data(), bits.size());
-    //output = bitstr;   //Aws::Utils::HashingUtils::Base64Encode(bb);
-    return {bitstr};
-}
-
-std::string bb_wrapper(
-    Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key)  //,
-    //Aws::String& encoded_output)
-{
-    using namespace Aws;
-
-    S3::Model::GetObjectRequest request;
-    request.WithBucket(bucket).WithKey(key);
-
-    auto outcome = client.GetObject(request);
-    if (outcome.IsSuccess()) {
-        AWS_LOGSTREAM_INFO(TAG, "Download completed!");
-        auto& s = outcome.GetResult().GetBody();
-        return bb_process(s);  //, encoded_output);
-    }
-    else {
-        AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
-        return "Will Have An Error";  //outcome.GetError().GetMessage();
-    }
-}
