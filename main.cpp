@@ -17,11 +17,6 @@
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/lambda-runtime/runtime.h>
-#include <libavutil/imgutils.h>
-#include <libavformat/avformat.h>
-#include <libavutil/adler32.h>
-#include <libavcodec/avcodec.h>
-#include <libswscale/swscale.h>
 #include <vector>
 #include <iterator>
 #include <iostream>
@@ -29,6 +24,11 @@
 #include <memory>
 #include <string>
 
+extern "C" {
+
+#include <libavformat/avformat.h>
+
+}
 
 using namespace aws::lambda_runtime;
 
@@ -41,6 +41,8 @@ std::string bb_wrapper(
     //Aws::String& encoded_output);
 
 std::string bb_videoread(Aws::String const& filename);  //, Aws::String& output);
+int bb_videodecode(Aws::Vector<unsigned char> video_bits);
+
 char const TAG[] = "LAMBDA_ALLOC";
 
 
@@ -56,7 +58,7 @@ static invocation_response my_handler(invocation_request const& req,
     auto credentialsProvider = Aws::MakeShared<Aws::Auth::EnvironmentAWSCredentialsProvider>(TAG);
     S3Client client(credentialsProvider, config);
     DynamoDBClient dynamoClient(credentialsProvider, config);
-	
+
     JsonValue json(req.payload);
     if (!json.WasParseSuccessful()) 
     {
@@ -101,7 +103,7 @@ static invocation_response my_handler(invocation_request const& req,
 
         if (!put_result.IsSuccess())
         {
-             return invocation_response::success(put_result.GetError().GetMessage(), "application/json");
+             return invocation_response::success("Success" /*put_result.GetError().GetMessage()*/, "application/json");
         }	    
 	
         return invocation_response::success("Yea-ee Yeah, DB put done! " + err, "application/json");  //invocation_response::failure(err, "DownloadFailure")
@@ -118,6 +120,38 @@ std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetCon
             "console_logger", Aws::Utils::Logging::LogLevel::Trace);
     };
 }
+
+
+int bb_videodecode(Aws::Vector<unsigned char> video_bits)
+{
+    int result;
+    int video_stream;
+    AVProbeData *pd;
+
+    pd->buf = (unsigned char *) video_bits.data();
+    pd->buf_size = (int) video_bits.size() - 1;
+    pd->filename = "";
+
+    AVFormatContext *inputContext = avformat_alloc_context();
+
+    inputContext->iformat = av_probe_input_format(pd, 1);
+    result = avformat_find_stream_info(inputContext, NULL);
+    if (result < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Can't get stream info\n");
+        return result;
+    }
+
+    video_stream = av_find_best_stream(inputContext, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+    if (video_stream < 0) {
+      av_log(NULL, AV_LOG_ERROR, "Can't find video stream in input file\n");
+      return -1;
+    }
+
+    
+    return 0;
+}
+
+
 
 std::string bb_videoread(Aws::IOStream& stream)  //, Aws::String& output)
 {
@@ -139,11 +173,13 @@ std::string bb_videoread(Aws::IOStream& stream)  //, Aws::String& output)
         }
     }
 
-
-
    auto videoDataStr = std::to_string(videoBits.size());  //"loops=" + std::to_string(loops);
     //Aws::Utils::ByteBuffer bb(bits.data(), bits.size());
     //output = bitstr;   //Aws::Utils::HashingUtils::Base64Encode(bb);
+
+   bb_videodecode(videoBits);
+
+
     return {videoDataStr};
 }
 
@@ -212,5 +248,4 @@ int main()
     ShutdownAPI(options);
     return 0;
 }
-
 

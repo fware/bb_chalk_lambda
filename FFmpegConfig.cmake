@@ -6,11 +6,11 @@
 #  FFMPEG_LIBRARY - Where libkbfxcommon.so resides
 #
 
-FIND_PATH(FFMPEG_INCLUDE_DIR libavutil/avutil.h
+FIND_PATH(FFMPEG_INCLUDE_DIR libavformat/avformat.h libavcodec/avcodec.h libavutil/avutil.h libswscale/swscale.h
   PATHS
-  /usr/local/include
-  /usr/include
-  ~/install
+  /usr/include/x86_64-linux-gnu
+  #/usr/include
+  #~/install
 )
 
 #IF ( NOT FFMPEG_INCLUDE_DIR )
@@ -24,35 +24,36 @@ FIND_PATH(FFMPEG_INCLUDE_DIR libavutil/avutil.h
 #ENDIF ( NOT FFMPEG_avutil_INCLUDE_DIR )
 
 # Build the include path with duplicates removed.
-IF (FFMPEG_INCLUDE_DIRS)
-    LIST(REMOVE_DUPLICATES FFMPEG_INCLUDE_DIRS)
-ENDIF (FFMPEG_INCLUDE_DIRS)
+#IF (FFMPEG_INCLUDE_DIRS)
+#    LIST(REMOVE_DUPLICATES FFMPEG_INCLUDE_DIRS)
+#ENDIF (FFMPEG_INCLUDE_DIRS)
 
 GET_FILENAME_COMPONENT(FFMPEG_INCLUDE_DIR ${FFMPEG_INCLUDE_DIR} ABSOLUTE)
 
-FIND_LIBRARY(FFMPEG_avutil_LIBRARY NAMES libavutil.a 
+FIND_LIBRARY(FFMPEG_avformat_LIBRARY NAMES libavformat.so libavformat.a 
   PATHS
-  /usr/local/lib
-  /usr/lib
-  ~/DevTools/ffmpeg-4.1.3/libavutil
+  /usr/lib/x86_64-linux-gnu
 )
 
-FIND_LIBRARY(FFMPEG_avformat_LIBRARY NAMES libavformat.a 
+FIND_LIBRARY(FFMPEG_avcodec_LIBRARY NAMES libavformat.so libavcodec.a 
+  /usr/lib/x86_64-linux-gnu
   PATHS
-  /usr/local/lib
-  ~/DevTools/ffmpeg-4.1.3/libavformat
+  #/usr/local/lib
+  #~/DevTools/ffmpeg-4.1.3/libavformat
 )
 
-FIND_LIBRARY(FFMPEG_avcodec_LIBRARY NAMES libavcodec.a 
+FIND_LIBRARY(FFMPEG_avutil_LIBRARY NAMES libavutil.so libavutil.a 
+  /usr/lib/x86_64-linux-gnu
   PATHS
-  /usr/local/lib
-  ~/DevTools/ffmpeg-4.1.3/libavcodec
+  #/usr/local/lib
+  #~/DevTools/ffmpeg-4.1.3/libavcodec
 )
 
-FIND_LIBRARY(FFMPEG_swsscale_LIBRARY NAMES libswscale.a 
+FIND_LIBRARY(FFMPEG_swsscale_LIBRARY NAMES libswscale.so libswscale.a 
+  /usr/lib/x86_64-linux-gnu
   PATHS
-  /usr/local/lib
-  ~/DevTools/ffmpeg-4.1.3/libswscale
+  #/usr/local/lib
+  #~/DevTools/ffmpeg-4.1.3/libswscale
 )
 
 SET(FFMPEG_LIBRARIES)
@@ -61,9 +62,9 @@ IF(FFMPEG_INCLUDE_DIR)
     SET(FFMPEG_FOUND TRUE)
     SET(FFMPEG_INCLUDE_DIRS ${FFMPEG_INCLUDE_DIR})
     SET(FFMPEG_LIST_LIBRARIES 
-	    ${FFMPEG_avutil_LIBRARY}
 	    ${FFMPEG_avformat_LIBRARY}
 	    ${FFMPEG_avcodec_LIBRARY}
+	    ${FFMPEG_avutil_LIBRARY}
 	    ${FFMPEG_swsscale_LIBRARY}
 	    )
 
@@ -74,7 +75,10 @@ ENDIF(FFMPEG_INCLUDE_DIR)
 
 MARK_AS_ADVANCED(
   FFMPEG_INCLUDE_DIR
+  FFMPEG_avformat_LIBRARY
+  FFMPEG_avcodec_LIBRARY
   FFMPEG_avutil_LIBRARY
+  FFMPEG_swsscale_LIBRARY
 )
 
 

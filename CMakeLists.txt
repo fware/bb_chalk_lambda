@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 11)
 project(bb_chalk LANGUAGES CXX)
 
 find_package(aws-lambda-runtime)
@@ -19,27 +19,21 @@ message(STATUS "    include path: ${FFMPEG_INCLUDE_DIR}")
 
 add_executable(${PROJECT_NAME} "main.cpp")
 
-if(CMAKE_VERSION VERSION_LESS "2.8.11")
+#if(CMAKE_VERSION VERSION_LESS "2.8.11")
   # Add OpenCV headers location to your include paths
-  include_directories(${OpenCV_INCLUDE_DIRS})
+  #include_directories(${OpenCV_INCLUDE_DIRS})
+
   # Add FFMPEG headers location to your include paths
-  include_directories(${FFMPEG_INCLUDE_DIR})
-endif()
+  #include_directories(${FFMPEG_INCLUDE_DIR})
+
+#endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
                       AWS::aws-lambda-runtime
                        ${AWSSDK_LINK_LIBRARIES}
-		       ${OpenCV_LIBS})
+		       ${OpenCV_LIBS}
+		       ${FFMPEG_LIBRARIES})
 
-	       #target_compile_options(${PROJECT_NAME} PRIVATE
-	       #"-fno-exceptions"
-	       #"-fno-rtti"
-	       #"-Wall"
-	       #"-Wextra"
-	       #"-Werror"
-	       #"-Wconversion"
-	       #"-Wno-sign-conversion")
-
-target_compile_features(${PROJECT_NAME} PRIVATE "cxx_std_14")
+target_compile_features(${PROJECT_NAME} PRIVATE "cxx_std_11")
 
 aws_lambda_package_target(${PROJECT_NAME})
