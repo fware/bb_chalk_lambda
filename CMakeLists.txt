@@ -4,6 +4,7 @@ project(bb_chalk LANGUAGES CXX)
 
 find_package(aws-lambda-runtime)
 find_package(AWSSDK COMPONENTS dynamodb s3)
+#find_package(OpenCV COMPONENTS opencv_core opencv_imgproc opencv_highgui)
 find_package(OpenCV REQUIRED)
 find_package(FFmpeg REQUIRED)
 
@@ -17,7 +18,7 @@ message(STATUS "FFMPEG library status:")
 message(STATUS "    libraries: ${FFMPEG_LIST_LIBRARIES}")
 message(STATUS "    include path: ${FFMPEG_INCLUDE_DIR}")
 
-add_executable(${PROJECT_NAME} "main.cpp")
+add_executable(${PROJECT_NAME} "main.cpp" "base64.cpp" "FFMPEGHelper.cpp")
 
 #if(CMAKE_VERSION VERSION_LESS "2.8.11")
   # Add OpenCV headers location to your include paths
@@ -37,3 +38,4 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 target_compile_features(${PROJECT_NAME} PRIVATE "cxx_std_11")
 
 aws_lambda_package_target(${PROJECT_NAME})
+#aws_lambda_package_target(${PROJECT_NAME} NO_LIBC)

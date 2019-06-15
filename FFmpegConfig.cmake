@@ -30,28 +30,31 @@ FIND_PATH(FFMPEG_INCLUDE_DIR libavformat/avformat.h libavcodec/avcodec.h libavut
 
 GET_FILENAME_COMPONENT(FFMPEG_INCLUDE_DIR ${FFMPEG_INCLUDE_DIR} ABSOLUTE)
 
-FIND_LIBRARY(FFMPEG_avformat_LIBRARY NAMES libavformat.so libavformat.a 
+FIND_LIBRARY(FFMPEG_avformat_LIBRARY NAMES libavformat.so
   PATHS
-  /usr/lib/x86_64-linux-gnu
-)
-
-FIND_LIBRARY(FFMPEG_avcodec_LIBRARY NAMES libavformat.so libavcodec.a 
-  /usr/lib/x86_64-linux-gnu
-  PATHS
+  /usr/lib
   #/usr/local/lib
   #~/DevTools/ffmpeg-4.1.3/libavformat
 )
 
-FIND_LIBRARY(FFMPEG_avutil_LIBRARY NAMES libavutil.so libavutil.a 
-  /usr/lib/x86_64-linux-gnu
+
+FIND_LIBRARY(FFMPEG_avcodec_LIBRARY NAMES libavcodec.so
   PATHS
+  /usr/lib
   #/usr/local/lib
   #~/DevTools/ffmpeg-4.1.3/libavcodec
 )
 
-FIND_LIBRARY(FFMPEG_swsscale_LIBRARY NAMES libswscale.so libswscale.a 
-  /usr/lib/x86_64-linux-gnu
+FIND_LIBRARY(FFMPEG_avutil_LIBRARY NAMES libavutil.so
   PATHS
+  /usr/lib
+  #/usr/local/lib
+  #~/DevTools/ffmpeg-4.1.3/libavcodec
+)
+
+FIND_LIBRARY(FFMPEG_swsscale_LIBRARY NAMES libswscale.so
+  PATHS
+  /usr/lib
   #/usr/local/lib
   #~/DevTools/ffmpeg-4.1.3/libswscale
 )
