@@ -25,11 +25,13 @@
 #include <memory>
 #include <string>
 
-#include "FFMPEGHelper.h"
+//#include "FFMPEGHelper.h"
 
 extern "C" {
 
-#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
 
 }
 
@@ -37,22 +39,272 @@ using namespace aws::lambda_runtime;
 
 static const char* ALLOCATION_TAG = "BBChalk";
 
-std::string bb_wrapper(
+#define INBUF_SIZE 4096
+
+std::string bb_chalk(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
-    Aws::String const& key);//,
-    //Aws::String& encoded_output);
+    Aws::String const& key);
+int bb_videowrapper(Aws::IOStream& stream);
+static void bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt,
+                   const char *filename);
 
-std::string bb_videoread(Aws::IOStream& stream);  //, Aws::String& output);
-int bb_videodecode(Aws::Vector<unsigned char> video_bits);
+
+std::string bb_videoread(Aws::IOStream& stream);
 
 char const TAG[] = "LAMBDA_ALLOC";
 
 
 
+std::string bb_videoread(Aws::IOStream& stream)
+{
+    Aws::Vector<unsigned char> videoBits;
+    videoBits.reserve(stream.tellp());
+    stream.seekg(0, stream.beg);
+    
+    char streamBuffer[4096 * 4];  //[1024 * 4];
+    auto loops = 0;
+
+    while (stream.good()) {
+        loops++;
+
+        stream.read(streamBuffer, sizeof(streamBuffer));
+        auto bytesRead = stream.gcount();
+
+        if (bytesRead > 0) {
+            videoBits.insert(videoBits.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
+        }
+    }
+
+    auto videoDataStr = std::to_string(videoBits.size());  
+
+    return videoDataStr;
+}
+
+
+
+std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetConsoleLoggerFactory()
+{
+    return [] {
+        return Aws::MakeShared<Aws::Utils::Logging::ConsoleLogSystem>(
+            "console_logger", Aws::Utils::Logging::LogLevel::Trace);
+    };
+}
+
+
+
+int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
+{
+    char buf[1024];
+    int dst_w = 640;
+    int dst_h = 480;
+    enum AVPixelFormat dst_pix_fmt = AV_PIX_FMT_YUV420P;
+    struct SwsContext *sws_ctx;
+    AVFrame *dstFrame;
+    int ret;
+
+
+    ret = avcodec_send_packet(dec_ctx, pkt);
+    if (ret < 0)
+        return -21;
+
+
+    sws_ctx = sws_getContext(dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
+                                      dst_w, dst_h,           dst_pix_fmt,
+                               SWS_BILINEAR, NULL,    NULL,   NULL);
+
+
+    while (ret >= 0) 
+    {
+        ret = avcodec_receive_frame(dec_ctx, frame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+            return -22;
+        else if (ret < 0)
+            return -23;
+
+
+        // frame1 should be filled by now (eg using avcodec_decode_video)
+        //sws_scale(sws_ctx, frame->data, frame->linesize, 0, dec_ctx->height, dstFrame->data, dstFrame->linesize);
+
+
+        //sws_scale(sws_ctx, ((AVPicture*)pFrame)->data, ((AVPicture*)pFrame)->linesize, 0, pCodecCtx->height, ((AVPicture *)pFrameRGB)->data, ((AVPicture *)pFrameRGB)->linesize);
+        /* convert to destination format */
+        //sws_scale(sws_ctx, (const uint8_t * const*)src_data, src_linesize, 0, src_h, dst_data, dst_linesize);
+
+        //printf("saving frame %3d\n", dec_ctx->frame_number);
+        //fflush(stdout);
+    }
+}
+
+
+
+int bb_videowrapper(Aws::IOStream& stream)
+{
+    const AVCodec *codec;
+    AVCodecParserContext *parser;
+    AVCodecContext *c = NULL;
+    AVFrame *frame;
+    /*uint8_t*/  char inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
+    uint8_t *data;
+    size_t data_size;
+    int ret;
+    AVPacket *pkt;
+
+    pkt = av_packet_alloc();
+    if (!pkt)
+        return -11;
+
+    /* set end of buffer to 0 (this ensures that no overreading happens for damaged MPEG streams) */
+    memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+
+    /* find the MPEG-1 video decoder */
+    codec = avcodec_find_decoder(AV_CODEC_ID_MPEG1VIDEO);
+    if (!codec)
+        return -12;
+
+    parser = av_parser_init(codec->id);
+    if (!parser)
+        return -13;
+
+    c = avcodec_alloc_context3(codec);
+    if (!c)
+        return -14;
+
+    if (avcodec_open2(c, codec, NULL) < 0)
+        return -15;
+
+    frame = av_frame_alloc();
+    if (!frame)
+        return -16;
+
+
+    /* Loop through the raw video data and decode each frame */
+    stream.seekg(0, stream.beg);
+    
+    //char streamBuffer[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];   //[4096];
+
+
+    while (stream.good()) 
+    {
+        /* read raw data from the IOStream */
+        stream.read(inbuf, INBUF_SIZE);
+        
+        data_size = stream.gcount();
+
+        data = reinterpret_cast<uint8_t *> (inbuf); 
+        while (data_size > 0)
+        {
+            ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
+                                data, data_size, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
+
+            if (ret < 0)
+                return -17;
+
+            data      += ret;
+            data_size -= ret;
+
+            if (pkt->size)
+                bb_videodecode(c, frame, pkt);
+
+        }
+    }
+    /* flush the decoder */
+    bb_videodecode(c, frame, NULL);
+
+    av_parser_close(parser);
+    avcodec_free_context(&c);
+    av_frame_free(&frame);
+    av_packet_free(&pkt);
+    
+    return 0;
+}
+
+
+std::string bb_chalk(
+    Aws::S3::S3Client const& client,
+    Aws::String const& bucket,
+    Aws::String const& key)
+{
+    using namespace Aws;
+
+    Aws::S3::Model::GetObjectRequest request;
+    request.WithBucket(bucket).WithKey(key);
+
+    auto outcome = client.GetObject(request);
+	
+    if (outcome.IsSuccess()) 
+    {
+        auto& stream = outcome.GetResult().GetBody();
+        int ret = bb_videowrapper(stream);
+        return std::to_string(ret);
+
+        /*** NOTES:  One way of extracting and casting stream to a char pointer.  Not using it. ***/
+        /*std::stringstream ss;
+        ss << outcome.GetResult().GetBody().rdbuf();
+        std::string str = ss.str();
+        std::vector<char> videoData(str.begin(), str.end());*/
+        /*** NOTES:  One way of extracting and casting stream to a char pointer.  Not using it. ***/
+
+
+        /***************START: Writing video file in /tmp ***********/
+        /*std::ofstream outfile ("/tmp/videofile.mp4", std::ofstream::binary);
+        char val;
+        for (int i=0; i < videoData.size(); i++)
+        {
+            val = (char) videoData[i];
+            outfile.write( reinterpret_cast<char *>(&val), sizeof(val) );
+        }
+        outfile.close();
+
+        long outfileSize = videoData.size();
+        videoData.clear();*/
+        /***************END: Writing video file in /tmp  ***********/
+
+
+
+        /***************START: Reading video file from /tmp  ***********/
+        /*std::vector<char> rVideoData;
+        std::ifstream infile ("/tmp/videofile.mp4", std::ifstream::binary);*/
+
+        /*long in_length;
+        if (infile)
+        {
+            // get length of file
+            infile.seekg(0, infile.end);
+            in_length = (long) infile.tellg();
+            infile.seekg(0, infile.beg);
+        }*/
+
+
+        /*char temp_input;
+        while( infile.read( reinterpret_cast<char *>(&temp_input), sizeof(temp_input) ) )
+        {
+            rVideoData.push_back(temp_input);
+        }
+        infile.close();
+
+        std::string str_out;
+        long inSize = (long) rVideoData.size();
+        std::string strInSize = std::to_string(inSize);
+        str_out = "rVideoData-size:" + strInSize; 
+        //str_out = "rVideoData-size:" + std::to_string(in_length);
+        return str_out;*/
+
+        /***************END: Reading video file from /tmp  ***********/
+
+
+    }
+    else 
+    {
+        AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
+        return "Error in bb_wrapper";  //outcome.GetError().GetMessage();
+    }
+}
+
+
+
 static invocation_response my_handler(invocation_request const& req, 
-							//Aws::S3::S3Client const& client)
-							Aws::Client::ClientConfiguration config)
+                            Aws::Client::ClientConfiguration config)
 {
     using namespace Aws::Utils::Json;
     using namespace Aws::S3;
@@ -81,11 +333,14 @@ static invocation_response my_handler(invocation_request const& req,
     //AWS_LOGSTREAM_INFO(TAG, "Attempting to download file from s3://" << bucket << "/" << key);
 
     Aws::String base64_encoded_file;
-    auto err = bb_wrapper(client, bucket, key);  //, base64_encoded_file);
+
+    auto err = bb_chalk(client, bucket, key);  //, base64_encoded_file);
+
+
     if (!err.empty()) 
-    {			
+    {           
         using namespace Aws::DynamoDB::Model;
-	
+    
         /*PutItemRequest pir;
         pir.SetTableName("truchalkdb-1");
         AttributeValue av;
@@ -108,7 +363,7 @@ static invocation_response my_handler(invocation_request const& req,
              return invocation_response::success("Success", "application/json");
              //return invocation_response::success(put_result.GetError().GetMessage(), "application/json");
         }*/    
-	
+    
         return invocation_response::success("Our error messaging: " + err, "application/json");  //invocation_response::failure(err, "DownloadFailure")
     }
 
@@ -116,173 +371,6 @@ static invocation_response my_handler(invocation_request const& req,
 }
 
 
-std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetConsoleLoggerFactory()
-{
-    return [] {
-        return Aws::MakeShared<Aws::Utils::Logging::ConsoleLogSystem>(
-            "console_logger", Aws::Utils::Logging::LogLevel::Trace);
-    };
-}
-
-
-int bb_videodecode(Aws::Vector<unsigned char> video_bits)
-{
-    int result;
-    int video_stream;
-    AVProbeData *pd;
-
-    pd->buf = (unsigned char *) video_bits.data();
-    pd->buf_size = (int) video_bits.size() - 1;
-    pd->filename = "";
-
-    AVFormatContext *inputContext = NULL;
-    if (!(inputContext = avformat_alloc_context())) {
-        return -12;
-    }
-
-    //inputContext->iformat = av_probe_input_format(pd, 1);
-    if (!(inputContext->iformat = av_probe_input_format(pd, 1))) {
-        return -23;
-    }
-
-    /*result = avformat_find_stream_info(inputContext, NULL);
-    if (result < 0) {
-        //av_log(NULL, AV_LOG_ERROR, "Can't get stream info\n");
-        return -34;  //return result;
-    }
-
-    video_stream = av_find_best_stream(inputContext, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
-    if (video_stream < 0) {
-      //av_log(NULL, AV_LOG_ERROR, "Can't find video stream in input file\n");
-      return -45;    //return -1;
-    }*/
-    
-    return 0;
-}
-
-
-
-std::string bb_videoread(Aws::IOStream& stream)  //, Aws::String& output)
-{
-    Aws::Vector<unsigned char> videoBits;
-    videoBits.reserve(stream.tellp());
-    stream.seekg(0, stream.beg);
-	
-    char streamBuffer[4096 * 4];  //[1024 * 4];
-    auto loops = 0;
-
-    while (stream.good()) {
-    	loops++;
-
-        stream.read(streamBuffer, sizeof(streamBuffer));
-        auto bytesRead = stream.gcount();
-
-        if (bytesRead > 0) {
-            videoBits.insert(videoBits.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
-        }
-    }
-
-   auto videoDataStr = std::to_string(videoBits.size());  //"loops=" + std::to_string(loops);
-    //Aws::Utils::ByteBuffer bb(bits.data(), bits.size());
-    //output = bitstr;   //Aws::Utils::HashingUtils::Base64Encode(bb);
-
-    //int bbret = bb_videodecode(videoBits);
-    //std::string bbret_str = std::to_string(bbret);
-
-
-    return videoDataStr;   //bbret_str;  // {videoDataStr};
-}
-
-std::string bb_wrapper(
-    Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key)
-{
-    using namespace Aws;
-
-    Aws::S3::Model::GetObjectRequest request;
-    request.WithBucket(bucket).WithKey(key);
-
-    auto outcome = client.GetObject(request);
-	
-    if (outcome.IsSuccess()) 
-    {
-        auto& s = outcome.GetResult().GetBody();
-        //return bb_videoread(s);
-
-        /*std::istreambuf_iterator<char> eos;
-        std::istreambuf_iterator<char> bos (outcome.GetResult().GetBody().rdbuf());
-        std::vector<char> videoData = std::vector<char> (bos, eos);*/
-
-        std::stringstream ss;
-        ss << outcome.GetResult().GetBody().rdbuf();
-        std::string str = ss.str();
-        std::vector<char> videoData(str.begin(), str.end());
-
-        /*av_register_all();
-
-        int ret;
-
-        FFMPEGHelper ffHelper((unsigned char *) videoData.data(), videoData.size());
-
-        AVFormatContext *avFmtCtx = avformat_alloc_context(); 
-
-        ffHelper.setAVFormatContext(avFmtCtx);
-
-        ret = avformat_open_input(&avFmtCtx, "dummy", nullptr, nullptr);
-
-        if (ret < 0)
-        {
-            return "avformat_open_input failed";
-        }*/
-
-        std::ofstream outfile ("/tmp/videofile.mp4", std::ofstream::binary);
-        char val;
-        for (int i=0; i < videoData.size(); i++)
-        {
-            val = (char) videoData[i];
-
-            //outfile << videoData[i];
-            outfile.write( reinterpret_cast<char *>(&val), sizeof(val) );
-        }
-        outfile.close();
-
-        long outfileSize = videoData.size();
-        videoData.clear();
-
-        std::vector<char> rVideoData;
-        std::ifstream infile ("/tmp/videofile.mp4", std::ifstream::binary);
-
-        /*long in_length;
-        if (infile)
-        {
-            // get length of file
-            infile.seekg(0, infile.end);
-            in_length = (long) infile.tellg();
-            infile.seekg(0, infile.beg);
-        }*/
-
-
-        char temp_input;
-        while( infile.read( reinterpret_cast<char *>(&temp_input), sizeof(temp_input) ) )
-        {
-            rVideoData.push_back(temp_input);
-        }
-        infile.close();
-
-        std::string str_out;
-        long inSize = (long) rVideoData.size();
-        std::string strInSize = std::to_string(inSize);
-        str_out = "rVideoData-size:" + strInSize; 
-        //str_out = "rVideoData-size:" + std::to_string(in_length);
-        return str_out;
-    }
-    else 
-    {
-        AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
-        return "Error in bb_wrapper";  //outcome.GetError().GetMessage();
-    }
-}
 
 int main()
 {
@@ -298,7 +386,7 @@ int main()
         config.caFile = "/etc/pki/tls/certs/ca-bundle.crt";
 
         auto handler_fn = [config](aws::lambda_runtime::invocation_request const& req) {
-            return my_handler(req, config);   //client);
+            return my_handler(req, config);
         };
         run_handler(handler_fn);
 
