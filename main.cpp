@@ -46,7 +46,7 @@ std::string bb_chalk(
     Aws::String const& bucket,
     Aws::String const& key);
 int bb_videowrapper(Aws::IOStream& stream);
-static void bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt,
+static int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt,
                    const char *filename);
 
 
@@ -102,16 +102,17 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
     struct SwsContext *sws_ctx;
     AVFrame *dstFrame;
     int ret;
+    bool firstTime = true;
+    int resizedHeight = 0;
+
+
+    dstFrame = av_frame_alloc();
 
 
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0)
         return -21;
 
-
-    sws_ctx = sws_getContext(dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
-                                      dst_w, dst_h,           dst_pix_fmt,
-                               SWS_BILINEAR, NULL,    NULL,   NULL);
 
 
     while (ret >= 0) 
@@ -122,9 +123,18 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
         else if (ret < 0)
             return -23;
 
+        if (firstTime)
+        {
+            sws_ctx = sws_getContext(frame->width, frame->height, dec_ctx->pix_fmt,
+                                        dst_w, dst_h, AV_PIX_FMT_YUV420P,
+                                        SWS_BICUBIC, NULL, NULL, NULL);
+            firstTime = false;
+            resizedHeight = frame->height;
+        }
 
         // frame1 should be filled by now (eg using avcodec_decode_video)
-        //sws_scale(sws_ctx, frame->data, frame->linesize, 0, dec_ctx->height, dstFrame->data, dstFrame->linesize);
+        sws_scale(sws_ctx, frame->data, frame->linesize, 
+            0, resizedHeight, dstFrame->data, dstFrame->linesize);
 
 
         //sws_scale(sws_ctx, ((AVPicture*)pFrame)->data, ((AVPicture*)pFrame)->linesize, 0, pCodecCtx->height, ((AVPicture *)pFrameRGB)->data, ((AVPicture *)pFrameRGB)->linesize);
@@ -134,6 +144,8 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
         //printf("saving frame %3d\n", dec_ctx->frame_number);
         //fflush(stdout);
     }
+
+    return 3012;
 }
 
 
@@ -192,6 +204,7 @@ int bb_videowrapper(Aws::IOStream& stream)
         data_size = stream.gcount();
 
         data = reinterpret_cast<uint8_t *> (inbuf); 
+
         while (data_size > 0)
         {
             ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
@@ -203,8 +216,9 @@ int bb_videowrapper(Aws::IOStream& stream)
             data      += ret;
             data_size -= ret;
 
-            if (pkt->size)
+            if (pkt->size) {
                 bb_videodecode(c, frame, pkt);
+            }
 
         }
     }
@@ -216,7 +230,7 @@ int bb_videowrapper(Aws::IOStream& stream)
     av_frame_free(&frame);
     av_packet_free(&pkt);
     
-    return 0;
+    return 1000;
 }
 
 
