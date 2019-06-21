@@ -18,6 +18,7 @@
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/lambda-runtime/runtime.h>
+#include "opencv2/core/core.hpp"
 #include <vector>
 #include <iterator>
 #include <iostream>
@@ -104,24 +105,27 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
     int ret;
     bool firstTime = true;
     int resizedHeight = 0;
-
+    int matCols = 0;
+    int fcount = 0;
 
     dstFrame = av_frame_alloc();
-
 
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0)
         return -21;
 
 
-
     while (ret >= 0) 
     {
         ret = avcodec_receive_frame(dec_ctx, frame);
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+        resizedHeight = dec_ctx->width;
+        
+        if (ret == AVERROR(EAGAIN))
             return -22;
+        else if (ret == AVERROR_EOF)
+            return matCols;
         else if (ret < 0)
-            return -23;
+            return -24;
 
         if (firstTime)
         {
@@ -129,23 +133,18 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
                                         dst_w, dst_h, AV_PIX_FMT_YUV420P,
                                         SWS_BICUBIC, NULL, NULL, NULL);
             firstTime = false;
-            resizedHeight = frame->height;
+            matCols = 8476;
         }
 
-        // frame1 should be filled by now (eg using avcodec_decode_video)
+        // frame should be filled by now (eg using avcodec_decode_video)
         sws_scale(sws_ctx, frame->data, frame->linesize, 
             0, resizedHeight, dstFrame->data, dstFrame->linesize);
 
-
-        //sws_scale(sws_ctx, ((AVPicture*)pFrame)->data, ((AVPicture*)pFrame)->linesize, 0, pCodecCtx->height, ((AVPicture *)pFrameRGB)->data, ((AVPicture *)pFrameRGB)->linesize);
-        /* convert to destination format */
-        //sws_scale(sws_ctx, (const uint8_t * const*)src_data, src_linesize, 0, src_h, dst_data, dst_linesize);
-
-        //printf("saving frame %3d\n", dec_ctx->frame_number);
-        //fflush(stdout);
+        cv::Mat frameMat = cv::Mat(dstFrame->height * 3 / 2, dstFrame->width, CV_8UC1, dstFrame->data[0]);
+        fcount++;
     }
 
-    return 3012;
+    return matCols;
 }
 
 
@@ -161,6 +160,7 @@ int bb_videowrapper(Aws::IOStream& stream)
     size_t data_size;
     int ret;
     AVPacket *pkt;
+    int num = 0;
 
     pkt = av_packet_alloc();
     if (!pkt)
@@ -170,7 +170,7 @@ int bb_videowrapper(Aws::IOStream& stream)
     memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 
     /* find the MPEG-1 video decoder */
-    codec = avcodec_find_decoder(AV_CODEC_ID_MPEG1VIDEO);
+    codec = avcodec_find_decoder(AV_CODEC_ID_H264 /*AV_CODEC_ID_MPEG1VIDEO*/);
     if (!codec)
         return -12;
 
@@ -216,8 +216,10 @@ int bb_videowrapper(Aws::IOStream& stream)
             data      += ret;
             data_size -= ret;
 
-            if (pkt->size) {
-                bb_videodecode(c, frame, pkt);
+            num += pkt->size;
+            if (pkt->size) 
+            {
+                ret = bb_videodecode(c, frame, pkt);
             }
 
         }
@@ -230,7 +232,7 @@ int bb_videowrapper(Aws::IOStream& stream)
     av_frame_free(&frame);
     av_packet_free(&pkt);
     
-    return 1000;
+    return ret;
 }
 
 
@@ -305,7 +307,6 @@ std::string bb_chalk(
         return str_out;*/
 
         /***************END: Reading video file from /tmp  ***********/
-
 
     }
     else 
