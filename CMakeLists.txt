@@ -18,7 +18,7 @@ message(STATUS "FFMPEG library status:")
 message(STATUS "    libraries: ${FFMPEG_LIST_LIBRARIES}")
 message(STATUS "    include path: ${FFMPEG_INCLUDE_DIR}")
 
-add_executable(${PROJECT_NAME} "main.cpp")
+add_executable(${PROJECT_NAME} "main.cpp" "BBController.cpp")
 
 #if(CMAKE_VERSION VERSION_LESS "2.8.11")
   # Add OpenCV headers location to your include paths

@@ -26,40 +26,71 @@
 #include <memory>
 #include <string>
 
-//#include "FFMPEGHelper.h"
+#include "BBController.hpp"
 
 extern "C" {
 
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavformat/avio.h>
+#include <libavutil/file.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 
 }
 
+using namespace std;
 using namespace aws::lambda_runtime;
+
+struct buffer_data 
+{
+    uint8_t *ptr;
+    size_t size; ///< size left in the buffer
+};
+
 
 static const char* ALLOCATION_TAG = "BBChalk";
 
 #define INBUF_SIZE 4096
 
+static int read_packet(void *opaque, uint8_t *buf, int buf_size);
+int bb_videoread(Aws::IOStream& stream, uint8_t **bufptr, size_t *size);
 std::string bb_chalk(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key);
-int bb_videowrapper(Aws::IOStream& stream);
+std::string bb_videowrapper(Aws::IOStream& stream);
 static int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt,
                    const char *filename);
 
 
-std::string bb_videoread(Aws::IOStream& stream);
 
 char const TAG[] = "LAMBDA_ALLOC";
 
 
 
-std::string bb_videoread(Aws::IOStream& stream)
+static int read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
-    Aws::Vector<unsigned char> videoBits;
+    struct buffer_data *bd = (struct buffer_data *)opaque;
+    buf_size = FFMIN(buf_size, bd->size);
+
+    if (!buf_size)
+        return AVERROR_EOF;
+    printf("ptr:%p size:%zu\n", bd->ptr, bd->size);
+
+    /* copy internal buffer data to buf */
+    memcpy(buf, bd->ptr, buf_size);
+    bd->ptr  += buf_size;
+    bd->size -= buf_size;
+
+    return buf_size;
+}
+
+
+
+int bb_videoread(Aws::IOStream& stream, uint8_t **bufptr, size_t *size)
+{
+    Aws::Vector<uint8_t> videoBits;
     videoBits.reserve(stream.tellp());
     stream.seekg(0, stream.beg);
     
@@ -73,13 +104,14 @@ std::string bb_videoread(Aws::IOStream& stream)
         auto bytesRead = stream.gcount();
 
         if (bytesRead > 0) {
-            videoBits.insert(videoBits.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
+            videoBits.insert(videoBits.end(), (uint8_t *)streamBuffer, (uint8_t *)streamBuffer + bytesRead);
         }
     }
 
-    auto videoDataStr = std::to_string(videoBits.size());  
-
-    return videoDataStr;
+    *size = videoBits.size();
+    *bufptr = videoBits.data();
+    
+    return ((int)videoBits.size());
 }
 
 
@@ -96,16 +128,15 @@ std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetCon
 
 int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
 {
+    BBController bCtrl;
     char buf[1024];
     int dst_w = 640;
     int dst_h = 480;
     enum AVPixelFormat dst_pix_fmt = AV_PIX_FMT_YUV420P;
     struct SwsContext *sws_ctx;
     AVFrame *dstFrame;
-    int ret;
+    int ret, fret;
     bool firstTime = true;
-    int resizedHeight = 0;
-    int matCols = 0;
     int fcount = 0;
 
     dstFrame = av_frame_alloc();
@@ -118,12 +149,11 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
     while (ret >= 0) 
     {
         ret = avcodec_receive_frame(dec_ctx, frame);
-        resizedHeight = dec_ctx->width;
         
         if (ret == AVERROR(EAGAIN))
             return -22;
         else if (ret == AVERROR_EOF)
-            return matCols;
+            return -23;
         else if (ret < 0)
             return -24;
 
@@ -133,106 +163,109 @@ int bb_videodecode(AVCodecContext *dec_ctx, AVFrame *frame, AVPacket *pkt)
                                         dst_w, dst_h, AV_PIX_FMT_YUV420P,
                                         SWS_BICUBIC, NULL, NULL, NULL);
             firstTime = false;
-            matCols = 8476;
         }
 
         // frame should be filled by now (eg using avcodec_decode_video)
         sws_scale(sws_ctx, frame->data, frame->linesize, 
-            0, resizedHeight, dstFrame->data, dstFrame->linesize);
+            0, frame->height, dstFrame->data, dstFrame->linesize);
 
         cv::Mat frameMat = cv::Mat(dstFrame->height * 3 / 2, dstFrame->width, CV_8UC1, dstFrame->data[0]);
+        fret = bCtrl.process_frame(frameMat);
+
         fcount++;
     }
 
-    return matCols;
+    return fcount;
 }
 
 
 
-int bb_videowrapper(Aws::IOStream& stream)
+std::string bb_videowrapper(Aws::IOStream& stream)
 {
-    const AVCodec *codec;
-    AVCodecParserContext *parser;
-    AVCodecContext *c = NULL;
-    AVFrame *frame;
-    /*uint8_t*/  char inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
-    uint8_t *data;
-    size_t data_size;
-    int ret;
-    AVPacket *pkt;
-    int num = 0;
+    AVFormatContext *fmt_ctx = NULL;
+    AVIOContext *avio_ctx = NULL;
+    AVCodecContext *avctx;
+    uint8_t *buffer = NULL, *avio_ctx_buffer = NULL;
+    size_t buffer_size, avio_ctx_buffer_size = 4096;
+    char *input_filename = NULL;
+    int ret = 0;
+    struct buffer_data bd = { 0 };
 
-    pkt = av_packet_alloc();
-    if (!pkt)
-        return -11;
-
-    /* set end of buffer to 0 (this ensures that no overreading happens for damaged MPEG streams) */
-    memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
-
-    /* find the MPEG-1 video decoder */
-    codec = avcodec_find_decoder(AV_CODEC_ID_H264 /*AV_CODEC_ID_MPEG1VIDEO*/);
-    if (!codec)
-        return -12;
-
-    parser = av_parser_init(codec->id);
-    if (!parser)
-        return -13;
-
-    c = avcodec_alloc_context3(codec);
-    if (!c)
-        return -14;
-
-    if (avcodec_open2(c, codec, NULL) < 0)
-        return -15;
-
-    frame = av_frame_alloc();
-    if (!frame)
-        return -16;
-
-
-    /* Loop through the raw video data and decode each frame */
+    Aws::Vector<uint8_t> videoBits;
+    videoBits.reserve(stream.tellp());
     stream.seekg(0, stream.beg);
     
-    //char streamBuffer[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];   //[4096];
+    char streamBuffer[4096 * 4];  //[1024 * 4];
+    auto loops = 0;
 
+    while (stream.good()) {
+        loops++;
 
-    while (stream.good()) 
-    {
-        /* read raw data from the IOStream */
-        stream.read(inbuf, INBUF_SIZE);
-        
-        data_size = stream.gcount();
+        stream.read(streamBuffer, sizeof(streamBuffer));
+        auto bytesRead = stream.gcount();
 
-        data = reinterpret_cast<uint8_t *> (inbuf); 
-
-        while (data_size > 0)
-        {
-            ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
-                                data, data_size, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
-
-            if (ret < 0)
-                return -17;
-
-            data      += ret;
-            data_size -= ret;
-
-            num += pkt->size;
-            if (pkt->size) 
-            {
-                ret = bb_videodecode(c, frame, pkt);
-            }
-
+        if (bytesRead > 0) {
+            videoBits.insert(videoBits.end(), (uint8_t *)streamBuffer, (uint8_t *)streamBuffer + bytesRead);
         }
     }
-    /* flush the decoder */
-    bb_videodecode(c, frame, NULL);
 
-    av_parser_close(parser);
-    avcodec_free_context(&c);
-    av_frame_free(&frame);
-    av_packet_free(&pkt);
+    /* fill opaque structure used by the AVIOContext read callback */
+    bd.ptr  = reinterpret_cast<uint8_t *> (videoBits.data());
+    bd.size = videoBits.size();
+
+    if (!(fmt_ctx = avformat_alloc_context())) 
+    {
+        return("ENOMEM for avformat_alloc_context");
+    }
+
     
-    return ret;
+    avio_ctx_buffer = reinterpret_cast<uint8_t *> (av_malloc(avio_ctx_buffer_size));
+    if (!avio_ctx_buffer) 
+    {
+        return("ENOMEM for av_malloc");
+    }
+    avio_ctx = avio_alloc_context(avio_ctx_buffer, avio_ctx_buffer_size,
+                                  0, &bd, &read_packet, NULL, NULL);
+    if (!avio_ctx) 
+    {
+        return("ENOMEM for avio_alloc_context");
+    }
+    fmt_ctx->pb = avio_ctx;
+
+    ret = avformat_open_input(&fmt_ctx, NULL, NULL, NULL);
+    if (ret < 0) 
+    {
+        return("Failure for avformat_open_input");
+    }
+
+    ret = avformat_find_stream_info(fmt_ctx, NULL);
+    if (ret < 0) 
+    {
+        return("Could not find stream information");
+    }
+
+    avctx = avcodec_alloc_context3(NULL);
+    if (!avctx)
+        return("Failure for avcodec_alloc_context3");
+
+    AVStream *st = fmt_ctx->streams[0];  //Note: We only need first stream
+    ret = avcodec_parameters_to_context(avctx, st->codecpar);
+    if (ret < 0) {
+        avcodec_free_context(&avctx);
+        return("Failure for avcodec_parameters_to_context");
+    }
+
+    // Fields which are missing from AVCodecParameters need to be taken from the AVCodecContext
+    avctx->properties = st->codec->properties;
+    avctx->codec      = st->codec->codec;
+    avctx->qmin       = st->codec->qmin;
+    avctx->qmax       = st->codec->qmax;
+    avctx->coded_width  = st->codec->coded_width;
+    avctx->coded_height = st->codec->coded_height;
+
+    auto temp_str = std::to_string(st->codec->coded_width);
+    return temp_str;
+    //return("bb_wrapper_Success");
 }
 
 
@@ -251,8 +284,8 @@ std::string bb_chalk(
     if (outcome.IsSuccess()) 
     {
         auto& stream = outcome.GetResult().GetBody();
-        int ret = bb_videowrapper(stream);
-        return std::to_string(ret);
+        std::string str_ret = bb_videowrapper(stream);
+        return str_ret;
 
         /*** NOTES:  One way of extracting and casting stream to a char pointer.  Not using it. ***/
         /*std::stringstream ss;
