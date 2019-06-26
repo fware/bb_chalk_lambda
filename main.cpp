@@ -25,13 +25,8 @@
 #include <memory>
 #include <string>
 
-#include "FFMPEGHelper.h"
+#include "BBController.hpp"
 
-extern "C" {
-
-#include <libavformat/avformat.h>
-
-}
 
 using namespace aws::lambda_runtime;
 
@@ -44,7 +39,6 @@ std::string bb_wrapper(
     //Aws::String& encoded_output);
 
 std::string bb_videoread(Aws::IOStream& stream);  //, Aws::String& output);
-int bb_videodecode(Aws::Vector<unsigned char> video_bits);
 
 char const TAG[] = "LAMBDA_ALLOC";
 
@@ -125,43 +119,6 @@ std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetCon
 }
 
 
-int bb_videodecode(Aws::Vector<unsigned char> video_bits)
-{
-    int result;
-    int video_stream;
-    AVProbeData *pd;
-
-    pd->buf = (unsigned char *) video_bits.data();
-    pd->buf_size = (int) video_bits.size() - 1;
-    pd->filename = "";
-
-    AVFormatContext *inputContext = NULL;
-    if (!(inputContext = avformat_alloc_context())) {
-        return -12;
-    }
-
-    //inputContext->iformat = av_probe_input_format(pd, 1);
-    if (!(inputContext->iformat = av_probe_input_format(pd, 1))) {
-        return -23;
-    }
-
-    /*result = avformat_find_stream_info(inputContext, NULL);
-    if (result < 0) {
-        //av_log(NULL, AV_LOG_ERROR, "Can't get stream info\n");
-        return -34;  //return result;
-    }
-
-    video_stream = av_find_best_stream(inputContext, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
-    if (video_stream < 0) {
-      //av_log(NULL, AV_LOG_ERROR, "Can't find video stream in input file\n");
-      return -45;    //return -1;
-    }*/
-    
-    return 0;
-}
-
-
-
 std::string bb_videoread(Aws::IOStream& stream)  //, Aws::String& output)
 {
     Aws::Vector<unsigned char> videoBits;
@@ -182,15 +139,9 @@ std::string bb_videoread(Aws::IOStream& stream)  //, Aws::String& output)
         }
     }
 
-   auto videoDataStr = std::to_string(videoBits.size());  //"loops=" + std::to_string(loops);
-    //Aws::Utils::ByteBuffer bb(bits.data(), bits.size());
-    //output = bitstr;   //Aws::Utils::HashingUtils::Base64Encode(bb);
+    auto videoDataStr = std::to_string(videoBits.size());  
 
-    //int bbret = bb_videodecode(videoBits);
-    //std::string bbret_str = std::to_string(bbret);
-
-
-    return videoDataStr;   //bbret_str;  // {videoDataStr};
+    return videoDataStr;
 }
 
 std::string bb_wrapper(
@@ -200,6 +151,9 @@ std::string bb_wrapper(
 {
     using namespace Aws;
 
+    BBController bCtrl;
+    std::string fret_str;
+
     Aws::S3::Model::GetObjectRequest request;
     request.WithBucket(bucket).WithKey(key);
 
@@ -208,41 +162,17 @@ std::string bb_wrapper(
     if (outcome.IsSuccess()) 
     {
         auto& s = outcome.GetResult().GetBody();
-        //return bb_videoread(s);
-
-        /*std::istreambuf_iterator<char> eos;
-        std::istreambuf_iterator<char> bos (outcome.GetResult().GetBody().rdbuf());
-        std::vector<char> videoData = std::vector<char> (bos, eos);*/
 
         std::stringstream ss;
         ss << outcome.GetResult().GetBody().rdbuf();
         std::string str = ss.str();
         std::vector<char> videoData(str.begin(), str.end());
 
-        /*av_register_all();
-
-        int ret;
-
-        FFMPEGHelper ffHelper((unsigned char *) videoData.data(), videoData.size());
-
-        AVFormatContext *avFmtCtx = avformat_alloc_context(); 
-
-        ffHelper.setAVFormatContext(avFmtCtx);
-
-        ret = avformat_open_input(&avFmtCtx, "dummy", nullptr, nullptr);
-
-        if (ret < 0)
-        {
-            return "avformat_open_input failed";
-        }*/
-
         std::ofstream outfile ("/tmp/videofile.mp4", std::ofstream::binary);
         char val;
         for (int i=0; i < videoData.size(); i++)
         {
             val = (char) videoData[i];
-
-            //outfile << videoData[i];
             outfile.write( reinterpret_cast<char *>(&val), sizeof(val) );
         }
         outfile.close();
@@ -250,31 +180,10 @@ std::string bb_wrapper(
         long outfileSize = videoData.size();
         videoData.clear();
 
-        std::vector<char> rVideoData;
-        std::ifstream infile ("/tmp/videofile.mp4", std::ifstream::binary);
+        fret_str = bCtrl.process("/tmp/videofile.mp4");
 
-        /*long in_length;
-        if (infile)
-        {
-            // get length of file
-            infile.seekg(0, infile.end);
-            in_length = (long) infile.tellg();
-            infile.seekg(0, infile.beg);
-        }*/
-
-
-        char temp_input;
-        while( infile.read( reinterpret_cast<char *>(&temp_input), sizeof(temp_input) ) )
-        {
-            rVideoData.push_back(temp_input);
-        }
-        infile.close();
-
-        std::string str_out;
-        long inSize = (long) rVideoData.size();
-        std::string strInSize = std::to_string(inSize);
-        str_out = "rVideoData-size:" + strInSize; 
-        //str_out = "rVideoData-size:" + std::to_string(in_length);
+        //return("Done");
+        auto str_out = fret_str;
         return str_out;
     }
     else 
