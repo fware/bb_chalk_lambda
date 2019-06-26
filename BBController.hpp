@@ -1,10 +1,12 @@
-/******
- *  OrgTrack.hpp
- *  Author:  WareShop Consulting LLC
+/*
+ * BBController.hpp
  *
- *  Copyright 2016
- *
+ *  Created on: May 28, 2018
+ *      Author: WareShop LLC
  */
+#ifndef BBCONTROLLER_HPP_
+#define BBCONTROLLER_HPP_
+
 #include "opencv2/dnn.hpp"
 #include "opencv2/dnn/shape_utils.hpp"
 #include "opencv2/core/core.hpp"
@@ -13,7 +15,6 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/objdetect/objdetect.hpp"
 #include "opencv2/features2d/features2d.hpp"
-#include "DebugHelpers.hpp"
 //#include <opencv2/legacy/compat.hpp>
 #include <unistd.h>
 #include <stdio.h>
@@ -22,8 +23,12 @@
 #include <vector>
 #include <algorithm>
 
+#include "DebugHelpers.hpp"
+#include "PlayerObs.hpp"
+
 using namespace std;
 using namespace cv;
+using namespace cv::dnn;
 
 
 #define SHOT_DEBUG
@@ -45,7 +50,11 @@ public:
 public:
 	string videofileName;
 	bool sizeFlag;
-	Mat finalImg;
+	bool isFirstPass;
+	bool haveBackboard;
+	bool semiCircleReady;
+	int frameCount;
+	int thresh;
 	int leftActiveBoundary;
 	int rightActiveBoundary;
 	int topActiveBoundary;
@@ -53,8 +62,29 @@ public:
 	int leftBBRegionLimit;
 	int rightBBRegionLimit;
 	int bottomBBRegionLimit;
-	cv::Rect unionRect;
-	bool isFirstPass;
+	int BackboardCenterX;
+	int BackboardCenterY;
+	int backboardOffsetX;
+	int backboardOffsetY;
+	int newPlayerWindowSize;
+	Mat grayImage;				//Gray image of source image.
+	Mat fgmask;					//Foreground mask image.
 	Mat img;
-
+	Mat threshold_output;
+	Rect Backboard;
+	Rect offsetBackboard;
+	Rect ballRect;	//Represents the box around the trackable basketball
+	Rect unionRect;
+	Point bodyPosit;
+	Point bbCenterPosit;
+	Point courtArc[50][1200];
+	PlayerObs newPlayerWindow;
+	vector <int> radiusArray;
+	vector< vector<Point> > boardContours;
+	vector<Vec4i> hierarchy;
+    vector<Rect> bodys;
+	Scalar greenColor;
+	Ptr<BackgroundSubtractor> bg_model;
 };
+
+#endif /* BBCONTROLLER_HPP__ */

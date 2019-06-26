@@ -1,10 +1,12 @@
-/******
- *  OrgTrack.hpp
- *  Author:  WareShop Consulting LLC
+/*
+ * PlayerObs.hpp
  *
- *  Copyright 2016
- *
+ *  Created on: May 28, 2018
+ *      Author: WareShop LLC
  */
+#ifndef PLAYEROBS_HPP_
+#define PLAYEROBS_HPP_
+
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/video/background_segm.hpp"
@@ -31,3 +33,5 @@ class PlayerObs {
 		Point   position; 
 		int 	frameCount;
 };
+
+#endif /* PLAYEROBS_HPP_ */
