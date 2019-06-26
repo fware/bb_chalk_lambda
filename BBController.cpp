@@ -13,6 +13,31 @@ BBController::BBController() : sizeFlag(false), frameCount(0), haveBackboard(fal
 BBController::~BBController() {}
 
 
+int BBController::initialize(string bball_filename, string body_cascade_name, string model_binary_filename, string model_config_filename)
+{
+	Mat bbsrc = imread(bball_filename);
+    if(!bbsrc.data )
+    {
+        cout <<  "Could not open or find the image" << std::endl ;
+        return -1111;
+    }
+
+	if( !body_cascade.load( body_cascade_name ) )
+	{
+		cout << "--(!)Error loading body_cascade_name" << endl; 
+		return -1112;
+	}
+
+	dnn::Net net = readNetFromDarknet(model_config_filename, model_binary_filename);
+	if (net.empty())
+	{
+		cout << "dnn model is empty." << endl;
+		return -1113;
+	}
+
+	return 0;
+}
+
 int BBController::findIndex_BSearch(const vector< int> &numbersArray, int key) {
 
 	int iteration = 0;
@@ -71,11 +96,6 @@ void BBController::getGray(const Mat& image, Mat& gray)
 
 std::string BBController::process(std::string file_name) 
 {
-	const string bballFileName			= "/home/fred/Pictures/OrgTrack_res/bball-half-court-vga.jpeg";
-	String body_cascade_name 			= "/home/fred/Pictures/OrgTrack_res/cascadeconfigs/haarcascade_fullbody.xml";
-	String modelBinary					= "/home/fred/Dev/DNN_models/MadeShots/V1/made_8200.weights";
-	String modelConfig					= "/home/fred/Dev/DNN_models/MadeShots/V1/made.cfg";
-	Mat bbsrc 							= imread(bballFileName);
 	CascadeClassifier body_cascade;
 	RNG rng(12345);
 	string str;
@@ -83,13 +103,6 @@ std::string BBController::process(std::string file_name)
 
     if( !cap.isOpened() )
         return("can not open video file");
-
-	dnn::Net net = readNetFromDarknet(modelConfig, modelBinary);
-	if (net.empty())
-	{
-		cout << "dnn model is empty." << endl;
-		return std::to_string(-1111);
-	}
 
     vector<string> classNamesVec;
     ifstream classNamesFile("/home/fred/Dev/DNN_models/MadeShots/V1/made.names");

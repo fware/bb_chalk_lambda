@@ -123,6 +123,9 @@ static invocation_response my_handler(invocation_request const& req,
     
         return invocation_response::success("Our error messaging: " + err, "application/json");  //invocation_response::failure(err, "DownloadFailure")
     }
+    else if (!err_config.empty())
+        return invocation_response::success("Our error messaging: " + err_config, "application/json");
+
 
     return invocation_response::success("bb_video_process return with empty results.  Not Good.", "application/json"); //invocation_response::success(base64_encoded_file, "application/base64");
 }
@@ -279,6 +282,16 @@ std::string bb_load_court_and_model(Aws::S3::S3Client const& client,
         return "Error in getting made.cfg";
     }
 
+
+
+    BBController bCtrl;
+
+    int ret = bCtrl.initialize( "/tmp/bball-half-court-vga.jpg", "/tmp/haarcascade_fullbody.xml",
+                        "/tmp/made_8200.weights", "/tmp/made.cfg" );
+    if (ret < 0)
+        return("Error trying to initialize bCtrl");
+
+
     return("Success for bb_load_court_and_model");
 }
 
@@ -290,7 +303,7 @@ std::string bb_video_process(
 {
     using namespace Aws;
 
-    BBController bCtrl;
+    //BBController bCtrl;
     std::string fret_str;
 
     Aws::S3::Model::GetObjectRequest request;

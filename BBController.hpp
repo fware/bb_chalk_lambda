@@ -41,6 +41,7 @@ public:
   ~BBController();
 
 public:
+	int initialize(string bball_filename, string body_cascade_name, string model_binary_filename, string model_config_filename);
 	int findIndex_BSearch(const vector< int> &my_numbers, int key);
 	double oneDDist(double p1, double p2);
 	double euclideanDist(double x1, double y1, double x2, double y2);
@@ -48,7 +49,6 @@ public:
 	std::string process(std::string file_name);
 
 public:
-	string videofileName;
 	bool sizeFlag;
 	bool isFirstPass;
 	bool haveBackboard;
@@ -70,6 +70,7 @@ public:
 	Mat grayImage;				//Gray image of source image.
 	Mat fgmask;					//Foreground mask image.
 	Mat img;
+	Mat bbsrc;
 	Mat threshold_output;
 	Rect Backboard;
 	Rect offsetBackboard;
@@ -85,6 +86,8 @@ public:
     vector<Rect> bodys;
 	Scalar greenColor;
 	Ptr<BackgroundSubtractor> bg_model;
+	CascadeClassifier body_cascade;
+	dnn::Net net;
 };
 
 #endif /* BBCONTROLLER_HPP__ */
