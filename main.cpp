@@ -42,7 +42,8 @@ std::string bb_load_court_and_model(Aws::S3::S3Client const& client,
                             Aws::String const& key_court, 
                             Aws::String const& key_body, 
                             Aws::String const& key_model, 
-                            Aws::String const& key_cfg);
+                            Aws::String const& key_cfg,
+                            Aws::String const& key_names);
 
 std::string bb_videoread(Aws::IOStream& stream);  //, Aws::String& output);
 
@@ -89,7 +90,8 @@ static invocation_response my_handler(invocation_request const& req,
                                         "bball-half-court-vga.jpeg", 
                                         "haarcascade_fullbody.xml", 
                                         "made_8200.weights", 
-                                        "made.cfg");
+                                        "made.cfg",
+                                        "made.names");
 
     auto err = bb_video_process(client, 
                                 bucket, 
@@ -171,7 +173,8 @@ std::string bb_load_court_and_model(Aws::S3::S3Client const& client,
                             Aws::String const& key_court, 
                             Aws::String const& key_body, 
                             Aws::String const& key_model, 
-                            Aws::String const& key_cfg)
+                            Aws::String const& key_cfg,
+                            Aws::String const& key_names)
 {
     using namespace Aws;
 
@@ -280,6 +283,32 @@ std::string bb_load_court_and_model(Aws::S3::S3Client const& client,
     else 
     {
         return "Error in getting made.cfg";
+    }
+
+    Aws::S3::Model::GetObjectRequest request_names;
+    request_names.WithBucket(bucket).WithKey(key_names);
+
+    auto outcome_names = client.GetObject(request_names);
+    if (outcome_names.IsSuccess()) 
+    {
+        std::stringstream ss;
+        ss << outcome_names.GetResult().GetBody().rdbuf();
+        std::string str = ss.str();
+        std::vector<char> bitData(str.begin(), str.end());
+
+        std::ofstream outfile ("/tmp/made.names", std::ofstream::binary);
+        char val;
+        for (int i=0; i < bitData.size(); i++)
+        {
+            val = (char) bitData[i];
+            outfile.write( reinterpret_cast<char *>(&val), sizeof(val) );
+        }
+        outfile.close();
+        bitData.clear();
+    }
+    else 
+    {
+        return "Error in getting made.names";
     }
 
 

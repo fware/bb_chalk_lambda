@@ -85,6 +85,7 @@ public:
 	vector< vector<Point> > boardContours;
 	vector<Vec4i> hierarchy;
     vector<Rect> bodys;
+    vector<string> classNamesVec;
 	Scalar greenColor;
 	Ptr<BackgroundSubtractor> bg_model;
 	CascadeClassifier body_cascade;

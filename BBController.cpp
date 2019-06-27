@@ -15,7 +15,7 @@ BBController::~BBController() {}
 
 int BBController::initialize()
 {
-	Mat bbsrc = imread("/tmp/bball-half-court-vga.jpg");
+	bbsrc = imread("/tmp/bball-half-court-vga.jpg");
     if(!bbsrc.data )
     {
         cout <<  "Could not open or find the image" << std::endl ;
@@ -32,7 +32,7 @@ int BBController::initialize()
     if (std::remove( "/tmp/haarcascade_fullbody.xml") != 0 )
     	return -1114;
 
-	dnn::Net net = readNetFromDarknet("/tmp/made.cfg", "/tmp/made_8200.weights");
+	net = readNetFromDarknet("/tmp/made.cfg", "/tmp/made_8200.weights");
 	if (net.empty())
 	{
 		cout << "dnn model is empty." << endl;
@@ -42,6 +42,20 @@ int BBController::initialize()
     	return -1116;
     if (std::remove( "/tmp/made_8200.weights" ) != 0 )
     	return -1117;
+
+    ifstream classNamesFile("/tmp/made.names");
+    if (classNamesFile.is_open())
+    {
+        string className = "";
+        while (std::getline(classNamesFile, className))
+            classNamesVec.push_back(className);
+    }
+    else
+    {
+    	return -1118;
+    }
+    if (std::remove( "/tmp/made.names" ) != 0 )
+    	return -1119;
 
 	return 0;
 }
