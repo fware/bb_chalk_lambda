@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <fstream>
 #include <iostream>
+#include <cstdio>
 #include <vector>
 #include <algorithm>
 
@@ -41,7 +42,7 @@ public:
   ~BBController();
 
 public:
-	int initialize(string bball_filename, string body_cascade_name, string model_binary_filename, string model_config_filename);
+	int initialize();
 	int findIndex_BSearch(const vector< int> &my_numbers, int key);
 	double oneDDist(double p1, double p2);
 	double euclideanDist(double x1, double y1, double x2, double y2);

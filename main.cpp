@@ -286,8 +286,7 @@ std::string bb_load_court_and_model(Aws::S3::S3Client const& client,
 
     BBController bCtrl;
 
-    int ret = bCtrl.initialize( "/tmp/bball-half-court-vga.jpg", "/tmp/haarcascade_fullbody.xml",
-                        "/tmp/made_8200.weights", "/tmp/made.cfg" );
+    int ret = bCtrl.initialize();
     if (ret < 0)
         return("Error trying to initialize bCtrl");
 

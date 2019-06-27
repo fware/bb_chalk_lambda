@@ -13,27 +13,35 @@ BBController::BBController() : sizeFlag(false), frameCount(0), haveBackboard(fal
 BBController::~BBController() {}
 
 
-int BBController::initialize(string bball_filename, string body_cascade_name, string model_binary_filename, string model_config_filename)
+int BBController::initialize()
 {
-	Mat bbsrc = imread(bball_filename);
+	Mat bbsrc = imread("/tmp/bball-half-court-vga.jpg");
     if(!bbsrc.data )
     {
         cout <<  "Could not open or find the image" << std::endl ;
         return -1111;
     }
+    if (std::remove( "/tmp/bball-half-court-vga.jpg" ) != 0)
+    	return -1112;
 
-	if( !body_cascade.load( body_cascade_name ) )
+	if( !body_cascade.load( "/tmp/haarcascade_fullbody.xml" ) )
 	{
 		cout << "--(!)Error loading body_cascade_name" << endl; 
-		return -1112;
+		return -1113;
 	}
+    if (std::remove( "/tmp/haarcascade_fullbody.xml") != 0 )
+    	return -1114;
 
-	dnn::Net net = readNetFromDarknet(model_config_filename, model_binary_filename);
+	dnn::Net net = readNetFromDarknet("/tmp/made.cfg", "/tmp/made_8200.weights");
 	if (net.empty())
 	{
 		cout << "dnn model is empty." << endl;
-		return -1113;
+		return -1115;
 	}
+    if (std::remove( "/tmp/made.cfg" ) != 0 )
+    	return -1116;
+    if (std::remove( "/tmp/made_8200.weights" ) != 0 )
+    	return -1117;
 
 	return 0;
 }
