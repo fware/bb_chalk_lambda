@@ -31,6 +31,7 @@
 using namespace aws::lambda_runtime;
 
 static const char* ALLOCATION_TAG = "BBChalk";
+BBController bCtrl;
 
 std::string bb_video_process(
     Aws::S3::S3Client const& client,
@@ -313,7 +314,7 @@ std::string bb_load_court_and_model(Aws::S3::S3Client const& client,
 
 
 
-    BBController bCtrl;
+    //BBController bCtrl;
 
     int ret = bCtrl.initialize();
     if (ret < 0)
@@ -360,10 +361,10 @@ std::string bb_video_process(
         long outfileSize = bitData.size();
         bitData.clear();
 
-        //fret_str = bCtrl.process("/tmp/videofile.mp4");
-        //auto str_out = fret_str;
-        //return str_out;
-        return("Done");
+        fret_str = bCtrl.process("/tmp/videofile.mp4");
+        auto str_out = fret_str;
+        return str_out;
+        //return("Done");
     }
     else 
     {

@@ -118,7 +118,6 @@ void BBController::getGray(const Mat& image, Mat& gray)
 
 std::string BBController::process(std::string file_name) 
 {
-	CascadeClassifier body_cascade;
 	RNG rng(12345);
 	string str;
 	VideoCapture cap(file_name);
@@ -394,7 +393,7 @@ std::string BBController::process(std::string file_name)
 				                }
 				            }
 
-				            imshow("YOLO: Detections", basketRoI);
+				            //imshow("YOLO: Detections", basketRoI);
 
 				            //********End of Shot Prediction **********
 
