@@ -126,13 +126,18 @@ std::string BBController::process(std::string file_name)
         return("can not open video file");
 
     vector<string> classNamesVec;
-    ifstream classNamesFile("/home/fred/Dev/DNN_models/MadeShots/V1/made.names");
-    if (classNamesFile.is_open())
-    {
-        string className = "";
-        while (std::getline(classNamesFile, className))
-            classNamesVec.push_back(className);
-    }
+    classNamesVec.push_back("made");
+    //ifstream classNamesFile("/tmp/made.names");
+    //if (classNamesFile.is_open())
+    //{
+        //string className = "";
+        //while (std::getline(classNamesFile, className))
+        //   classNamesVec.push_back(className);
+    //}
+    //else
+    //{
+    //	return("Failed to open made.names.");
+    //}
 
     Mat firstFrame;
 	cap >> firstFrame;
@@ -142,11 +147,12 @@ std::string BBController::process(std::string file_name)
     Size S = Size((int) cap.get(CAP_PROP_FRAME_WIDTH),    // Acquire input size
                   (int) cap.get(CAP_PROP_FRAME_HEIGHT));
 
-	if (S.width > 640)
+	if (S.width > 320 /*640*/)
 	{
 		sizeFlag = true;
-		S = Size(640, 480);
+		S = Size(240, 180);  //Size(640, 480);
 		resize(firstFrame, firstFrame, S);
+		resize(bbsrc, bbsrc, S);
 	}
 
 	Mat finalImg(S.height, S.width+S.width, CV_8UC3);
@@ -161,20 +167,28 @@ std::string BBController::process(std::string file_name)
 	firstFrame.release();
 
 	isFirstPass = true;
+	bool imageEmpty = false;
 
     for(;;)
     {
         cap >> img;
 
+		if (img.empty())
+		{
+			cout << __LINE__ << " Bug" << endl;
+			imageEmpty = true;
+			break;
+		}
+
+   		frameCount++;
+
+   		//if (frameCount == 10000)
+   		//	break;
+
         if (sizeFlag)
         	resize(img, img, S);
 
       	flip(img, img, 0);
-
-		frameCount++;
-
-		if (img.empty())
-			break;
 
 		///*************************Start of main code to detect BackBoard*************************
 		stringstream ss;
@@ -247,8 +261,7 @@ std::string BBController::process(std::string file_name)
 		}*/
 
 		///*******Start of main code to detect Basketball*************************
-
-		if (haveBackboard)
+		if (haveBackboard && ((frameCount % 40) == 0))
 		{
 	    	if (!semiCircleReady)
 	    	{
@@ -274,6 +287,9 @@ std::string BBController::process(std::string file_name)
 	    		}
 	    		semiCircleReady = true;
 	    	}
+
+
+	    	cout << "haveBackboard=" << haveBackboard << "   frameCount=" << frameCount << endl;
 
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
 			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
@@ -489,11 +505,20 @@ std::string BBController::process(std::string file_name)
 		Mat left(finalImg, Rect(0, 0, img.cols, img.rows));
 		img.copyTo(left);
 		Mat right(finalImg, Rect(bbsrc.cols, 0, bbsrc.cols, bbsrc.rows));
-		bbsrc.copyTo(right);		
-
+		bbsrc.copyTo(right);		   		
+		cout << __LINE__ << " Bug" << endl;
 
 	} //for (;;)
+	cout << __LINE__ << " Bug" << endl;
 
+    if (imageEmpty)
+    	cout << "broke loop before image is empty" << endl;
+    else
+    	cout << "Loop has ended frameCount:" << frameCount << endl;
+
+	img.release();
+
+    str = "We broke loop at frameCount " + std::to_string(frameCount);
 	return(str);
     //return("BBController process done.");
 }
