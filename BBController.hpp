@@ -47,13 +47,15 @@ public:
 	double oneDDist(double p1, double p2);
 	double euclideanDist(double x1, double y1, double x2, double y2);
 	void getGray(const Mat& image, Mat& gray);
-	std::string process(std::string file_name);
+	//std::string process(std::string file_name);
+	int process(cv::Mat image, int frame_count);
 
 public:
 	bool sizeFlag;
 	bool isFirstPass;
 	bool haveBackboard;
 	bool semiCircleReady;
+	bool imageEmpty;
 	int frameCount;
 	int thresh;
 	int leftActiveBoundary;
@@ -68,9 +70,9 @@ public:
 	int backboardOffsetX;
 	int backboardOffsetY;
 	int newPlayerWindowSize;
+	Size S;
 	Mat grayImage;				//Gray image of source image.
 	Mat fgmask;					//Foreground mask image.
-	Mat img;
 	Mat bbsrc;
 	Mat threshold_output;
 	Rect Backboard;

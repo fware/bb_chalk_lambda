@@ -116,14 +116,17 @@ void BBController::getGray(const Mat& image, Mat& gray)
         gray = image;
 }
 
-std::string BBController::process(std::string file_name) 
+//std::string BBController::process(std::string file_name) 
+int BBController::process(cv::Mat image, int frame_count) 
 {
+	Mat img = image.clone();
+	int frameCount = frame_count;
 	RNG rng(12345);
 	string str;
-	VideoCapture cap(file_name);
+//	VideoCapture cap(file_name);
 
-    if( !cap.isOpened() )
-        return("can not open video file");
+    //if( !cap.isOpened() )
+    //    return("can not open video file");
 
     vector<string> classNamesVec;
     classNamesVec.push_back("made");
@@ -139,45 +142,48 @@ std::string BBController::process(std::string file_name)
     //	return("Failed to open made.names.");
     //}
 
-    Mat firstFrame;
-	cap >> firstFrame;
-	if (firstFrame.empty())
-        return("Cannot retrieve first video capture frame.");
+    //Mat firstFrame;
+	//cap >> firstFrame;
 
-    Size S = Size((int) cap.get(CAP_PROP_FRAME_WIDTH),    // Acquire input size
-                  (int) cap.get(CAP_PROP_FRAME_HEIGHT));
+	if (img.empty())
+        return(-20);  //"Cannot retrieve first video capture frame.");
 
-	if (S.width > 320 /*640*/)
-	{
-		sizeFlag = true;
-		S = Size(240, 180);  //Size(640, 480);
-		resize(firstFrame, firstFrame, S);
-		resize(bbsrc, bbsrc, S);
-	}
-
-	Mat finalImg(S.height, S.width+S.width, CV_8UC3);
-	leftActiveBoundary 			= firstFrame.cols/4;  
-	rightActiveBoundary			= firstFrame.cols*3/4;
-	topActiveBoundary				= firstFrame.rows/4;
-	bottomActiveBoundary			= firstFrame.rows*3/4;
-	leftBBRegionLimit = (int) firstFrame.cols * 3 / 8;
-	rightBBRegionLimit = (int) firstFrame.cols * 5 / 8;
-	//topBBRegionLimit = (int) firstFrame.rows*2/8;
-	bottomBBRegionLimit = (int) leftActiveBoundary;
-	firstFrame.release();
-
-	isFirstPass = true;
-	bool imageEmpty = false;
-
-    for(;;)
+    if (frameCount <= 1)
     {
-        cap >> img;
+    	S = Size( img.cols, img.rows );
+
+    	if (S.width > 320)
+    	{
+    		sizeFlag = true;
+    		S = Size(240, 180);  //Size(640, 480);
+    	}    	
+
+		leftActiveBoundary 			= S.width/4;  
+		rightActiveBoundary			= S.width*3/4;
+		topActiveBoundary				= S.height/4;
+		bottomActiveBoundary			= S.height*3/4;
+		leftBBRegionLimit = (int) S.width * 3 / 8;
+		rightBBRegionLimit = (int) S.width * 5 / 8;
+		//topBBRegionLimit = (int) S.height*2/8;
+		bottomBBRegionLimit = (int) leftActiveBoundary;
+
+		isFirstPass = true;
+		imageEmpty = false;
+
+		resize(bbsrc, bbsrc, S);
+    }
+
+	Mat	finalImg(S.height, S.width+S.width, CV_8UC3);		
+
+    //for(;;)
+    //{
+        //cap >> img;
 
 		if (img.empty())
 		{
-			cout << __LINE__ << " Bug" << endl;
+			cout << __LINE__ << " Empty img mat" << endl;
 			imageEmpty = true;
-			break;
+			return -1;
 		}
 
    		frameCount++;
@@ -500,7 +506,7 @@ std::string BBController::process(std::string file_name)
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
-		string str = "frame" + ss.str();		
+		str = "frame" + ss.str();		
 		putText(img, str, Point(100, 100), FONT_HERSHEY_PLAIN, 2 , greenColor, 2);
 		Mat left(finalImg, Rect(0, 0, img.cols, img.rows));
 		img.copyTo(left);
@@ -508,7 +514,7 @@ std::string BBController::process(std::string file_name)
 		bbsrc.copyTo(right);		   		
 		cout << __LINE__ << " Bug" << endl;
 
-	} //for (;;)
+	//} //for (;;)
 	cout << __LINE__ << " Bug" << endl;
 
     if (imageEmpty)
@@ -517,8 +523,12 @@ std::string BBController::process(std::string file_name)
     	cout << "Loop has ended frameCount:" << frameCount << endl;
 
 	img.release();
+	left.release();
+	right.release();
+	finalImg.release();
 
     str = "We broke loop at frameCount " + std::to_string(frameCount);
-	return(str);
+    return 0;
+	//return(str);
     //return("BBController process done.");
 }
